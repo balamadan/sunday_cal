@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+	<title>Who Killed Kenny?</title>
+	<meta name="description" content="&amp;quot;Oh my god, they killed Kenny">
+	<meta http-equiv="content-type" content="text/html;charset=UTF-8">	
+	<meta name="author" content="Prabhu">
+	<link rel="stylesheet" href="css/styles.css" />
+	<script src="js/jquery-1.9.1.min.js"></script>
+</head>
+<body>
+	<h1>Who killed Kenny?</h1>
+	<p class="labelSuspect">Here are the suspects. Your job is to sort them from who you think is the most likely to the least likely, by clicking on the suspect.</p>
+	<!-- Below container is used for rendering the suspects with image-->
+	<div id="rowA" class="rowA">
+		<ul>
+				<li class="stan"><span>stan</span></li>
+				<li class="kyle"><span>kyle</span></li>
+				<li class="kenny"><span>kenny</span></li>
+				<li class="carftman"><span>carftman</span></li>
+				<li class="wendy"><span>wendy</span></li>
+				<li class="iky"><span>iky</span></li>
+				<li class="tweek"><span>tweek</span></li>
+		</ul>	
+	</div>
+	<!-- Below container is used for rendering the new sorting suspects with image-->
+	<div id="rowB" class="rowB">
+		<ul>
+		</ul>
+	</div>
+	<!--Button for reset & save -->
+	<div class="btnRow">
+		<input type="button" value="Reset" class="secondary" id="reset" />
+		<input type="button" value="Save" class="primary" />
+	</div>
+</body>
+<script>
+	$(document).ready(function () {
+	// Here is the logic for the doing sorting and creating the suspects in row b i.e. below container.
+	// Logic is while clicking the row A suspects hiding the same and appending into the below container.
+	$('#rowA li').click (function() {
+		var perName = $(this).attr('class').split(' ')[0];
+		$(this).hide();
+
+		$('#rowB ul').append('<li class="' +perName+ '"><span>' +perName+ '</span></li>');
+		$('#rowB ul li').unbind("click");
+		$('#rowB ul li').bind("click", function() {
+			var per = $(this).attr('class').split(' ')[0];
+			$('#rowA ul').find('li.' +per).show();
+			$(this).remove();
+		});
+		
+	});
+	// This below event which is used for resetting the suspects to the initial stage.
+	$('#reset').click( function () {
+		$('#rowA li').show();
+		$('#rowB li').remove();
+	})
+});
+</script>
+</html>

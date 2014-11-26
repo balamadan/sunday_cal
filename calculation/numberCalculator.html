@@ -1,0 +1,62 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Calculations</title>
+	</head>
+	<body>
+		<div id="container">
+			<h2>Number calculator</h2>
+			<form name="numberForm" method="post" action="#">
+				<p class="group">
+					<label for="number1">Number1: </label>
+					<input type="number" name="number1" id="number1"  />
+				</p>
+				<p class="group">
+					<label for="number2">Number2: </label>
+					<input type="text" name="number2" id="number2"  />
+				</p>
+				<p class="group">
+					<label for="result">Result: </label>
+					<input type="text" name="result" id="result" value="" />
+				</p>
+				<p class="group">
+					<input type="button" onclick="dataCalculator.sumObject.findSum();" value="Find Sum" />
+				</p>
+			</form>
+		</div>
+		<script>
+			var dataCalculator = {};
+			/*
+			numberObj1 = document.getElementById("number1");
+			numberObj2 = document.getElementById("number2");
+			number1 = numberObj1.value;
+			number2 = numberObj2.value;
+			number1 = parseInt (number1);
+			number2 = parseInt (number2);
+			*/
+
+			/*
+			number1 = document.getElementById("number1").value;
+			number2 = document.getElementById("number2").value;
+			number1 = parseInt (number1);
+			number2 = parseInt (number2);
+			*/
+
+
+			dataCalculator.sumObject = {
+				 
+				sum : 0,
+                
+				findSum : function () {
+					number1 = parseInt (document.getElementById("number1").value);
+					number2 = parseInt (document.getElementById("number2").value);
+						alert(typeof(number1));
+						alert(typeof(number2));
+						this.sum = number1 + number2;
+						document.getElementById("result").value = this.sum;
+				}
+			};
+		</script>
+	</body>
+</html>

@@ -1,0 +1,1169 @@
+var PAYPAL = PAYPAL || {};
+
+PAYPAL.AddBankUtil = {
+    label : {
+        nameHelpTip : 'nameTooltipCallout',
+        firstName : 'firstName',
+        bankName : 'bankName',
+        state : 'state',
+        city : 'city',
+        branch : 'branch',
+        branchAddress : 'branchAddress',
+        ifsc : 'ifsc',
+        fieldsProcessing : 'processingFields',
+        branchLocations : {},
+        prevFetchedBank : null,
+        addBankForm : 'addBankForm',
+        accountNumber : 'accountNumber',
+        retypeAccountNumber : 'reTypeAccountNumber',
+        maskedAccountNumber : 'account_no',
+        fldIfscOption : 'fldIfscOption',
+        ifscCodeOption : 'bank_ifsc_code_known_option',
+        buttonContinue : 'addbank_ID',
+        buttonCancel : 'cancel_ID',
+        btnAddBankNoJs : 'btnAddBankNoJs',
+        buttonSubmit : 'reviewSubmit',
+        buttonEdit : 'reveiwEdit',
+        buttonValidate : 'validateIFSC',
+        headerFetchBank : 'fetchIfscHeader',
+        ifscYesSelection : 'ifscYesSelection',
+        ifscNoSelection : 'ifscNoSelection',
+        ifscProcessContainer : 'ifscLooking',
+        ifscResultContainer : 'ifscResult',
+        addressBlock : 'addressBlock',
+        fieldIFSC : 'ifscCode',
+        closeIcon : 'closeIcon',
+        ajaxTimeOut : 20000,
+        businessName : 'useBusinessName',
+        personalName : 'usePersonalName',
+        toggleButtonsJS : 'toggleButtonsJS'  
+    },
+    ifscStatus : null, /* 0:Invalid; 1:Valid; 2:notKnown */
+    inArr : function(a, b) {
+        if (!Array.prototype.indexOf) {
+            Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
+                "use strict";
+                if (this == null) {
+                    throw new TypeError();
+                }
+                var t = Object(this);
+                var len = t.length >>> 0;
+                if (len === 0) {
+                    return -1;
+                }
+                var n = 0;
+                if (arguments.length > 1) {
+                    n = Number(arguments[1]);
+                    if (n != n) { // shortcut for verifying if it's NaN
+                        n = 0;
+                    } else if (n != 0 && n != Infinity && n != -Infinity) {
+                        n = (n > 0 || -1) * Math.floor(Math.abs(n));
+                    }
+                }
+                if (n >= len) {
+                    return -1;
+                }
+                var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
+                for (; k < len; k++) {
+                    if (k in t && t[k] === searchElement) {
+                        return k;
+                    }
+                }
+                return -1;
+            }
+        }
+        return !!~a.indexOf(b)
+    }
+}
+
+PAYPAL.AddBankIN = {
+    init : function() {
+        var self = this,
+        objLabel = PAYPAL.AddBankUtil.label,
+        ifscFields = $('input:radio[name=' + objLabel.ifscCodeOption + ']');
+        self.calTooltipPos();
+        self.processNoJsDom();
+        $('#callout_auto_withdraw').show();
+        $('.ifscHelp').hide();
+        ($('#bankAcctBusinessName').length && PAYPAL.ValidateForm.inlineError['show_buss_name_on_error'] == '1') ?
+                self.showBusinessInfo() :
+                self.showPersonalInfo();
+        ($('#' + objLabel.addBankForm).hasClass('error')) ?
+                $('#' + objLabel.nameHelpTip).hide() :
+                $('#' + objLabel.nameHelpTip).show();
+        // Name field event
+        $('#' + objLabel.firstName).bind('focus blur', function(event) {
+            if (event.type == 'focus') {
+                $('#' + objLabel.nameHelpTip).show();
+            } else {
+                $('#' + objLabel.nameHelpTip).hide();
+                PAYPAL.ValidateForm.clearError($(this).attr('name'), $(this).val());
+            }
+        });
+        // Account number field event
+        $('#' + objLabel.accountNumber).ready(function(){
+            var selfVal = $.trim($('#' + objLabel.accountNumber).val());
+            if(selfVal != '') {
+                $('#' + objLabel.maskedAccountNumber).val(selfVal)
+                $('#' + objLabel.accountNumber).val(Array(selfVal.length + 1).join("*"));
+            }
+        })
+        $('#' + objLabel.accountNumber).on({
+            'focus' : function() {
+                var hiddenAccNo = $('#' + objLabel.maskedAccountNumber).val();
+                if(hiddenAccNo != '')
+                    $(this).val(hiddenAccNo);
+            },
+            'blur' : function(){
+                $('#' + objLabel.maskedAccountNumber).val($.trim($(this).val()));
+                $(this).val(Array($.trim($(this).val()).length + 1).join("*"));
+                PAYPAL.ValidateForm.clearError($(this).attr('name'), $(this).val());
+            },
+            'keyup' : function() {
+                $('#' + objLabel.maskedAccountNumber).val($.trim($(this).val()));
+                PAYPAL.ValidateForm.isValidAccountNumber();
+            },
+        });
+        //Retype-Account number field event
+        $('#' + objLabel.retypeAccountNumber).on({
+            'blur' : function() {
+                var accountNo = $('#' + objLabel.accountNumber).val(),
+                    retypeNum = $(this).val();
+                if(accountNo != '' && retypeNum != '') {
+                    PAYPAL.ValidateForm.validateAccountNumberOnSubmit();
+                }
+            },
+            'keyup' : function() {
+                var accountNo = $('#' + objLabel.accountNumber).val(),
+                    errClass = $('form').hasClass('error') ? 'error' : 'customError';
+                (accountNo == '' && $.trim($(this).val()) != '') ?
+                    PAYPAL.ValidateForm.addRemoveFieldError(
+                            PAYPAL.ValidateForm.getFieldObject('retype_account_number', 'p'),
+                            PAYPAL.ValidateForm.inlineError['retype_account_number_first'], errClass, true) :
+                            PAYPAL.ValidateForm.isValidAccountNumber();
+            },
+            'paste' : function(e){
+                e.preventDefault();
+                var errClass = $('form').hasClass('error') ? 'error' : 'customError';
+                PAYPAL.ValidateForm.addRemoveFieldError(
+                        PAYPAL.ValidateForm.getFieldObject('retype_account_number', 'p'),
+                        PAYPAL.ValidateForm.inlineError['retype_account_number_donotpaste'], errClass, true);
+            }
+        });
+        // IFSC field event
+        if(ifscFields.length) { // Radio button
+            $(ifscFields)
+                .change(function() { self.toggleIFSCFields(this.value); })
+                .ready(function() {
+                    var fValue = $(ifscFields).filter(':checked').val() || '';
+                    (fValue === '') ? $(ifscFields).first().attr('checked', 'checked') : ''; 
+                    self.toggleIFSCFields($(ifscFields).filter(':checked').val());
+                });
+        }
+        // Bank name field event
+        $('#' + objLabel.bankName).on({
+            'keyup' : function() {
+                 var fetchedBank = $('#' + objLabel.bankName).val(),
+                     prevFetchedBank = objLabel.prevFetchedBank;                
+                if(PAYPAL.AddBankUtil.ifscStatus != 2 && fetchedBank != prevFetchedBank) {
+                    $('#' + objLabel.fieldIFSC).val('');
+                    $('#' + objLabel.closeIcon).addClass('hide');
+                    PAYPAL.AddBankReview.ifscCode = '';
+                    PAYPAL.AddBankUtil.ifscStatus = 0;
+                    $('#' + objLabel.ifsc).html($('#ifscNA').html());
+                }
+                objLabel.prevFetchedBank = '';
+                self.disableConsecutiveFields('all');
+            },
+            'paste' : function() {
+                PAYPAL.ValidateForm.validateBank();
+            },
+            'ready' : self.getBanksList()
+        });
+        
+        self.eventsHandlers();
+    },
+    processNoJsDom : function() {
+        var objLabel = PAYPAL.AddBankUtil.label;
+        var flowFallBack = $('#flowFallBack');
+        
+        if(!flowFallBack.length) {
+            $('#' + objLabel.fldIfscOption).removeClass('hide');
+        }
+        
+        $('#' + objLabel.buttonContinue).removeClass('hide');
+        $('#' + objLabel.buttonValidate).removeClass('hide');
+        $('#' + objLabel.btnAddBankNoJs).remove();
+    },
+    toggleIFSCFields : function(ifscOption) {
+        var objLabel = PAYPAL.AddBankUtil.label;
+        if (ifscOption == 'Yes') {
+            $('#' + objLabel.ifscNoSelection).addClass('hide');
+            $('#' + objLabel.ifscYesSelection).removeClass('hide');
+            $('#' + objLabel.ifscNoSelection).removeClass('ifscNotKnownBankName');
+            PAYPAL.ValidateForm.addRemoveFieldError(
+                    PAYPAL.ValidateForm.getFieldObject('routing_number_1', 'fieldset'),
+                    '', 'customError error', false);
+        } else {
+            $('#' + objLabel.ifscYesSelection).addClass('hide');
+            $('#' + objLabel.ifscNoSelection).removeClass('ifscNotKnownBankName blueContainer hide')
+                    .css('margin-left', '0px').removeClass('invalidIfsc')
+                    .show();
+            $('#' + objLabel.headerFetchBank).addClass('hide');
+            $('#' + objLabel.buttonValidate).removeAttr('disabled');
+        }
+        PAYPAL.AddBankIN.disableConsecutiveFields('all');
+        $('#' + objLabel.ifscNoSelection + ' p.error .help').html('');
+        $('#' + objLabel.ifscNoSelection + ' p').removeClass('error');
+        $('#' + objLabel.fieldIFSC).val('');
+        $('#' + objLabel.ifsc).html($('#ifscNA').html());
+        PAYPAL.AddBankReview.ifscCode = '';
+        PAYPAL.AddBankUtil.ifscStatus = null;
+        $('.bankDetails').html(''); 
+        $('#' + objLabel.ifscResultContainer).hide();
+        $('#' + objLabel.bankName).val('');
+        $('#' + objLabel.addressBlock).removeClass('hide');
+    },
+    getBanksList : function() {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label,
+        bankDataArray = [],
+        bankRawData = $('#bankListData').html(),
+        bankDataArray = bankRawData.split("|");
+
+         self.disableConsecutiveFields('all');
+         $('#' + objLabel.bankName).autocomplete({
+                source: function(request, response) {
+                      var matches = [], notMatches =[];
+                      $.map(bankDataArray, function(tag) {
+                    	  	 tag = tag.replace(/\"/g,"");
+                             if(tag.toUpperCase().indexOf(request.term.toUpperCase()) === 0 ) {
+                                    matches.push(tag);
+                             }
+                             else if(tag.toUpperCase().indexOf(request.term.toUpperCase()) !== -1 ) {
+                                    notMatches.push(tag);
+                             }
+                      });
+                      response($.merge(matches.sort(), notMatches.sort()));
+                },
+                select : function(event, bank) {
+                    var matchFound = 0, fetchedBank = bank.item.value;
+                     var prevFetchedBank = objLabel.prevFetchedBank;
+                     objLabel.prevFetchedBank = fetchedBank;
+                    $.each(bankDataArray, function(key, val) {
+                        if (val == fetchedBank) {
+                            matchFound = 1;
+                            bankName = val;
+                            if(!($('#bankName').closest($('#ifscNoSelection')).hasClass('ifscNotKnownBankName'))) {
+                                if(fetchedBank != prevFetchedBank) {
+                                    self.getStatesList(bankName, matchFound);
+                                    PAYPAL.ValidateForm.clearError('bank_name', fetchedBank);
+                                }
+                            }
+                            else {
+                                matchFound = 0;
+                            }
+                        }
+                    });
+                    (!matchFound) ? self.disableConsecutiveFields('all') : '';              
+                }
+         }).data("autocomplete")._renderItem = function (ul, item) {
+          var newText = String(item.value).replace(
+                  new RegExp((this.term).replace(/([\\\.\+\*\?\[\^\]\$\(\)\{\}\=\!\<\>\|\:])/g, "\\$1"), "gi"),
+                  "<span class='ui-state-highlight'><b>$&</b></span>");
+        
+          return $("<li></li>")
+              .data("item.autocomplete", item)
+              .append("<a>" + newText + "</a>")
+              .appendTo(ul);
+        };
+    },
+    ajaxCallTimeout : function() {
+        window.location.href = window.location.href;
+    },
+    getStatesList : function(bankId, flagBankMatch) {
+        var self = this, statesCitiesList, states = [], objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.state).next().remove();
+        self.disableConsecutiveFields('all');
+        $.ajax({
+            type: 'GET',
+            url: window.location,
+            dataType: 'json',
+            data: {
+                "bankName" : bankName,
+                "_eventId_fetchStates": "Fetch States" 
+            },
+            cache : false,
+            timeout : objLabel.ajaxTimeOut,
+            success: function(data) {
+                if(data.ajax && data.ajax.result === 'success' && data.ajax.jsonResponse !== null) {
+                    $('#' + objLabel.state).each(function(i, item) {
+                        $('option:not(:first)', $(item)).remove();
+                    });
+                    (flagBankMatch == 1) ? 
+                            $('#' + objLabel.state).removeAttr('disabled') : 
+                            self.disableConsecutiveFields('all');
+                    statesList = $.parseJSON(data.ajax.jsonResponse);
+                    statesList.bank_states.sort();
+                    $.each(statesList.bank_states, function(key, val) {
+                        if(val.state != '') {
+                            $('#' + objLabel.state).append(
+                                    $("<option></option>").attr("value", val).text(val));
+                        }
+                    });
+                } else if(data.type && data.type === 'redirect') {
+                    self.ajaxCallTimeout();
+                } else {
+                    // Nothing to be executed
+                }
+            },
+            error: function(xhr, ajaxOptions, thrownError) {
+                self.ajaxCallTimeout();
+            },
+            beforeSend: function(xhr) {
+                $('#' + objLabel.state).parent().append(
+                        $('.' + objLabel.fieldsProcessing).html());
+                $('#' + objLabel.state).next().removeClass('hide');
+                self.disableTemp(true, 'state');
+            },
+            complete: function(XMLHttpRequest, textStatus) {
+                $('#' + objLabel.state).next().remove();
+                self.disableTemp(false, 'state');
+            }
+        });
+    },
+    getCitiesList : function(stateId) {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.city).next().remove();
+        $('#' + objLabel.city).each(function(i, item) {
+            $('option:not(:first)', $(item)).remove();
+        });
+        $.ajax({
+            type: 'GET',
+            url: window.location,
+            dataType: 'json',
+            data: {
+                "bankName" : bankName,
+                "state" : stateId,
+                "_eventId_fetchCities": "Fetch Cities" 
+            },
+            cache : false,
+            timeout : objLabel.ajaxTimeOut,
+            success: function(data) {
+                if(data.ajax && data.ajax.result === 'success' && data.ajax.jsonResponse !== null) {
+                    $('#' + objLabel.city).each(function(i, item) {
+                        $('option:not(:first)', $(item)).remove();
+                    });
+                    citiesList = $.parseJSON(data.ajax.jsonResponse);
+                    citiesList.bank_cities.sort();
+                    $.each(citiesList.bank_cities, function(key, val) {
+                        $('#' + objLabel.city).removeAttr('disabled');
+                        if(val != '') {
+                            $('#' + objLabel.city).append(
+                                    $("<option></option>").attr("value", val).text(val));
+                        }
+                    });
+                } else if(data.type && data.type === 'redirect') {
+                    self.ajaxCallTimeout();
+                } else {
+                    // Nothing to be executed
+                }
+            },
+            error: function(xhr, ajaxOptions, thrownError) {
+                self.ajaxCallTimeout();
+            },
+            beforeSend: function(xhr) {
+                $('#' + objLabel.city).parent().append(
+                        $('.' + objLabel.fieldsProcessing).html());
+                $('#' + objLabel.city).next().removeClass('hide');
+                self.disableTemp(true, 'city');
+            },
+            complete: function(XMLHttpRequest, textStatus) {
+                $('#' + objLabel.city).next().remove();
+                self.disableTemp(false, 'city');
+            }
+        });
+    },
+    getBranchesList : function(cityId) {
+        var self = this, branchesList, objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.branch).next().remove();
+        $('#' + objLabel.branch).each(function(i, item) {
+            $('option:not(:first)', $(item)).remove();
+        });
+        $.ajax({
+            type: 'GET',
+            url: window.location,
+            dataType: 'json',
+            data : {
+                "bankName" : $('#' + objLabel.bankName).val(),
+                "state" : $('#' + objLabel.state).val(),
+                "city" : $('#' + objLabel.city).val(),
+                "_eventId_fetchBranchDetails": "Fetch Branch location and Address"
+            },
+            cache : false,
+            timeout : objLabel.ajaxTimeOut,
+            success : function(data) {
+                if(data.ajax && data.ajax.result === 'success' && data.ajax.jsonResponse !== null) {
+                    $('#' + objLabel.branch).each(function(i, item) {
+                        $('option:not(:first)', $(item)).remove();
+                    });
+                    $('#' + objLabel.branch).removeAttr('disabled');
+                    branchesList = $.parseJSON(data.ajax.jsonResponse);
+                    objLabel.branchesList = branchesList;
+                    branchesList.bank_bulkdetails.sort(function(a, b){
+                        var nameA=a.branch_location.toLowerCase(), nameB=b.branch_location.toLowerCase();
+                        if (nameA < nameB)
+                            return -1;
+                        if (nameA > nameB)
+                            return 1;
+                        return 0;
+                    });
+                    $.each(branchesList.bank_bulkdetails, function(key, val) {
+                        if(val.branch_location != '') {
+                            $('#' + objLabel.branch).append(
+                                    $("<option></option>").attr(
+                                            "value", val.branch_location).text(val.branch_location));
+                        }
+                    });
+                    var usedNames = {};
+                    $('#' + objLabel.branch + " > option").each(function () {
+                        if(usedNames[this.text]) {
+                            $(this).remove();
+                        } else {
+                            usedNames[this.text] = this.value;
+                        }
+                    });             
+                    // Grouping of Branches
+                    var branches = branchesList.bank_bulkdetails;
+    
+                    for(var i = 0; i < branches.length; i++) {
+                        var branch = branches[i];    
+                        
+                        if(typeof objLabel.branchLocations[branch.branch_location] === "undefined") {
+                            objLabel.branchLocations[branch.branch_location] = [];
+                        }
+    
+                        objLabel.branchLocations[branch.branch_location].push({
+                            sort_code: branch.sort_code,
+                            branch_location: branch.branch_location,
+                            street_address: branch.street_address
+                        });       
+                    }
+                } else if(data.type && data.type === 'redirect') {
+                    self.ajaxCallTimeout();
+                } else {
+                    // Nothing to be executed
+                }
+            },
+            error : function(xhr, ajaxOptions, thrownError) {
+                self.ajaxCallTimeout();
+            },
+            beforeSend : function(xhr) {
+                $('#' + objLabel.branch).parent().append(
+                        $('.' + objLabel.fieldsProcessing).html());
+                $('#' + objLabel.branch).next().removeClass('hide');
+                self.disableTemp(true, 'branch');
+            },
+            complete : function(XMLHttpRequest, textStatus) {
+                $('#' + objLabel.branch).next().remove();
+                self.disableTemp(false, 'branch');
+            }
+        });
+    },
+    getBranchAddressList : function(branchId) {
+        var branchAddressList, self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.branchAddress).each(function(i, item) {
+            $('option:not(:first)', $(item)).remove();
+        });
+        self.disableConsecutiveFields('branch');
+        $('#' + objLabel.branchAddress).removeAttr('disabled');
+        
+        $.each(objLabel.branchLocations, function(key, val) {
+            val.sort();
+            $.each(val, function(k, v) {
+                if(v.branch_location === branchId) { 
+                    if(v.street_address != '') {
+                        $('#' + objLabel.branchAddress).append(
+                                $("<option></option>").attr("value", v.street_address).text(v.street_address));
+                    }
+                }
+            });
+        });
+        objLabel.branchesList = objLabel.branchLocations;
+        if ($('#' + objLabel.branchAddress).children().length === 2) {
+            $('#' + objLabel.branchAddress).attr('disabled','disabled').closest('p').hide();
+            $.each(objLabel.branchLocations, function(key, val) {
+                $.each(val, function(k, v) {
+                    if(v.branch_location === branchId) {
+                        self.setIFSC(v.sort_code);
+                    }
+                });
+            });
+        } else {
+            $('#' + objLabel.branchAddress).removeAttr('disabled').closest('p').show();
+        }
+    },
+    calTooltipPos : function() {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        var posLeft =  ($('#bankAcctBusinessName')) ?
+        		$('.businessFullName span').width() + 220 + 'px' :
+                	$('.lastName').width() + 220 + 'px';
+        $('#' + objLabel.nameHelpTip).css('margin-left', posLeft);
+    },
+    showBusinessInfo : function() {
+        var objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.toggleButtonsJS).show();
+        $('#toggleButtonsNonJS').remove();
+        $("#toggleButtonsJS").removeClass("hide");
+        if($('#bankAcctBusinessName').length) {
+            $('#' + objLabel.personalName).show();
+            $('#' + objLabel.personalName).removeClass("hide");
+            $('#' + objLabel.businessName).hide();
+            $('#' + objLabel.firstName + ',' + '#lastName').attr('disabled', 'disabled');
+            $('#' + objLabel.firstName + ',' + '.lastName').hide();
+            $('.businessFullName').removeClass("hide");
+            $('#bankAcctBusinessName').removeAttr('disabled');
+            var posLeft = $('.businessFullName span').width() + 220 + 'px';
+            $('#' + objLabel.nameHelpTip).css('margin-left', posLeft);
+        }
+        PAYPAL.ValidateForm.addRemoveFieldError(
+                PAYPAL.ValidateForm.getFieldObject('bank_acct_first_name', 'fieldset'),
+                '', 'customError error', false);
+    },
+    showPersonalInfo : function() {
+        var objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.toggleButtonsJS).show();
+        $('#toggleButtonsNonJS').remove();
+        $("#toggleButtonsJS").removeClass("hide");
+        $('#' + objLabel.businessName).show();
+        $('#' + objLabel.personalName).hide();
+        $('#' + objLabel.firstName + ',' + '#lastName').removeAttr('disabled');
+        $('#' + objLabel.firstName + ',' + '.lastName').show();
+        $('#' + objLabel.firstName + ',' + '.lastName').removeClass("hide");;
+        $('.businessFullName').addClass('hide');
+        $('#bankAcctBusinessName').attr('disabled', 'disabled');
+        var posLeft = $('.lastName').width() + 220 + 'px';
+        $('#' + objLabel.nameHelpTip).css('margin-left', posLeft);
+    },
+    eventsHandlers : function() {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('.toolTipControl').bind('mouseover focus', function() {
+            $('.toolTipTitle').hide();
+        });
+        $('#' + objLabel.state).on({
+            'focus': function(event) {
+                curState = $(this).val();
+            },
+            'click blur keyup': function(event) {
+                var keyPress = event.charCode || event.keyCode;
+                var eType = event.type;
+                var selectedState = $(this).val();
+
+                if((curState != selectedState && eType != 'keyup') 
+                    || (curState != selectedState && keyPress == '13')) {
+                    curState = selectedState;
+                    self.disableConsecutiveFields('state');
+                    if (selectedState == '') {
+                        self.disableConsecutiveFields('state');
+                    } else {
+                        self.getCitiesList(selectedState);
+                        PAYPAL.ValidateForm.clearError($(this).attr('name'), $(this).val());
+                    }
+                }
+            }
+        });
+        $('#' + objLabel.city).on({
+            'focus': function(event) {
+                curCity = $(this).val();
+            },
+            'click blur keyup': function(event) {
+                var keyPress = event.charCode || event.keyCode;
+                var eType = event.type;
+                var selectedCity = $(this).val();
+
+                if((curCity != selectedCity && eType != 'keyup') 
+                    || (curCity != selectedCity && keyPress == '13')) {
+                    curCity = selectedCity;
+                    objLabel.branchLocations = {};
+                    self.disableConsecutiveFields('city');
+                    if (selectedCity == '') {
+                        self.disableConsecutiveFields('city');
+                    } else {
+                        self.getBranchesList(selectedCity);
+                        PAYPAL.ValidateForm.clearError($(this).attr('name'), $(this).val());
+                    }
+                }
+            }
+        });
+        $('#' + objLabel.branch).change(function() {
+            self.disableConsecutiveFields('branch');
+            var selectedBranch = $(this).val();
+            if (selectedBranch == '') {
+                self.disableConsecutiveFields('branch');
+                self.resetIFSC();
+            } else {
+                self.getBranchAddressList(selectedBranch);
+                PAYPAL.ValidateForm.clearError($(this).attr('name'), $(this).val());
+            }
+        });
+        $('#' + objLabel.branchAddress).change(function() {
+            self.resetIFSC();
+            var selectedAddress = $(this).val(), branchDet = objLabel.branchesList;
+            if (selectedAddress == '') {
+                self.resetIFSC();
+            } else {
+                $.each(branchDet, function(key, val) {
+                    PAYPAL.ValidateForm.clearError('bank_acct_bank_branch_address', $('#' + objLabel.branchAddress).val());
+                    $.each(val, function(k, v) {
+                        if (v.street_address === selectedAddress) {
+                            self.setIFSC(v.sort_code);
+                        }
+                    });
+                });
+            }
+        });
+        $('#' + objLabel.personalName).click(function() {
+            self.showPersonalInfo();
+        });
+        $('#' + objLabel.businessName).click(function() {
+            self.showBusinessInfo();
+        });
+    },
+    disableTemp : function(isDisable, reqFrom) {
+        var isDisable = isDisable || false, self = this, objLabel = PAYPAL.AddBankUtil.label;
+        (isDisable) ?
+                ($('#' + objLabel.bankName + ',' 
+                        + '#' + objLabel.state + ','
+                        + '#' + objLabel.city + ',' 
+                        + '#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).attr('disabled', 'disabled')) :
+                ($('#' + objLabel.bankName + ','
+                        + '#' + objLabel.state + ','
+                        + '#' + objLabel.city + ',' 
+                        + '#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).removeAttr('disabled'));
+        self.disableConsecutiveFields(reqFrom);
+    },
+    disableConsecutiveFields : function(level) {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        switch (level) {
+            case 'all':
+                $('#' + objLabel.state + ',' 
+                        + '#' + objLabel.city + ',' 
+                        + '#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).attr('disabled', 'disabled');
+                $('#' + objLabel.state + ',' 
+                        + '#' + objLabel.city + ',' 
+                        + '#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).each(function(i, item) {
+                    $('option:not(:first)', $(item)).remove();
+                    PAYPAL.ValidateForm.addRemoveFieldError(
+                            PAYPAL.ValidateForm.getFieldObject($(item).attr('name'), 'p'), '', 'error', false);
+                });
+                $('#' + objLabel.branchAddress).closest('p').hide();
+                break;
+            case 'state':
+                $('#' + objLabel.city + ',' 
+                        + '#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).attr('disabled', 'disabled');
+                $('#' + objLabel.city + ',' + '#' 
+                        + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).each(function(i, item) {
+                    $('option:not(:first)', $(item)).remove();
+                    PAYPAL.ValidateForm.addRemoveFieldError(
+                            PAYPAL.ValidateForm.getFieldObject($(item).attr('name'), 'p'), '', 'error', false);
+                });
+                self.resetIFSC();
+                break;
+            case 'city':
+                $('#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).attr('disabled', 'disabled');
+                $('#' + objLabel.branch + ',' 
+                        + '#' + objLabel.branchAddress).each(function(i, item) {
+                    $('option:not(:first)', $(item)).remove();
+                    PAYPAL.ValidateForm.addRemoveFieldError(
+                            PAYPAL.ValidateForm.getFieldObject($(item).attr('name'), 'p'), '', 'error', false);
+                });
+                self.resetIFSC();
+                break;
+            case 'branch':
+                $('#' + objLabel.branchAddress).attr('disabled', 'disabled');
+                $('#' + objLabel.branchAddress).children('option:not(:first)').remove();
+                PAYPAL.ValidateForm.addRemoveFieldError(
+                        PAYPAL.ValidateForm.getFieldObject($('#' + objLabel.branchAddress).attr('name'), 'p'), '', 'error', false);
+                self.resetIFSC();
+                break;
+        }
+    },
+    setIFSC : function(ifsc) {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.ifsc).html(ifsc);
+        $('#ifscNA').addClass("accessAid");
+        $('#' + objLabel.fieldIFSC).val(ifsc);
+        $('#' + objLabel.ifsc).addClass("ifscVal");
+        $("#ifscCodeDisplay .label").addClass("hColor");
+        setTimeout(function() {
+            $("#ifscCodeDisplay .label").removeClass("hColor");
+        }, 3500);
+        $('#' + objLabel.closeIcon).removeClass('hide');
+        PAYPAL.ValidateForm.addRemoveFieldError(
+                PAYPAL.ValidateForm.getFieldObject('routing_number_1', 'fieldset'), '', 'customError', false);
+
+        if($('form .error').length == 0) {
+            $('form').removeClass('error');
+            $('#' + objLabel.ifscNoSelection).removeAttr('style');
+        }
+        
+        PAYPAL.AddBankUtil.ifscStatus = 1;
+    },
+    resetIFSC : function() {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.ifsc).html($('#ifscNA').html());
+        $('#' + objLabel.ifsc).removeClass("accessAid");
+        $('#' + objLabel.ifsc).removeClass("ifscVal");
+        $('#' + objLabel.fieldIFSC).val('');
+        $('#' + objLabel.closeIcon).addClass('hide');
+        PAYPAL.AddBankReview.ifscCode = '';
+        PAYPAL.AddBankUtil.ifscStatus = 0;
+    }
+};
+
+PAYPAL.ValidateForm = {
+    hasError : function () {
+        "use strict";
+        var self = this, isError = false, filledAccNumbers = true, ifscOption = $('input:radio[name=bank_ifsc_code_known_option]:checked').val(),
+            fieldsToBeVerified = [], formElements = $('#' + PAYPAL.AddBankUtil.label.addBankForm).serializeArray(),
+            defaultRequiredFields = [ 
+                                         'bank_acct_first_name',
+                                         'account_number',
+                                         'retype_account_number',
+                                         'bank_name',
+                                         'bank_acct_bank_province',
+                                         'bank_acct_bank_city',
+                                         'bank_acct_bank_branch',
+                                         'bank_acct_bank_branch_address'
+                                    ],
+            ifscYesRequiredFields = [ 
+                                         'bank_acct_first_name',
+                                         'account_number',
+                                         'retype_account_number',
+                                         'routing_number_1'
+                                    ];
+        fieldsToBeVerified = defaultRequiredFields;
+        (ifscOption !== 'undefied' && (ifscOption === 'Yes' 
+            && (PAYPAL.AddBankUtil.ifscStatus != 0 || PAYPAL.AddBankUtil.ifscStatus == 1))) ?
+            fieldsToBeVerified = ifscYesRequiredFields : '';
+
+        $('p.error .help').html('');
+        (PAYPAL.AddBankUtil.ifscStatus == 0 && !PAYPAL.AddBankUtil.inArr(fieldsToBeVerified, 'routing_number_1')) ? 
+                fieldsToBeVerified.push('routing_number_1') : '';
+        (PAYPAL.AddBankUtil.ifscStatus == 2 && !PAYPAL.AddBankUtil.inArr(fieldsToBeVerified, 'bank_name')) ? 
+                fieldsToBeVerified.push('bank_name') : '';
+
+        $('p, fieldset').removeClass('customError');
+        $.each(formElements, function(index, field) {
+            if(PAYPAL.AddBankUtil.inArr(fieldsToBeVerified, field.name)) {
+                if($.trim(field.value) === '') {
+                    (self.getFieldObject(field.name, 'fieldset').length)?
+                        self.addRemoveFieldError(self.getFieldObject(field.name, 'fieldset'), 
+                                PAYPAL.ValidateForm.inlineError[field.name], 'error', true):
+                            self.addRemoveFieldError(self.getFieldObject(field.name, 'p'), 
+                                    PAYPAL.ValidateForm.inlineError[field.name], 'error',  true);
+                        isError = true;
+                        (field.name === 'account_number' || field.name === 'retype_account_number') ? filledAccNumbers = false : '';
+                } else {
+                    (self.getFieldObject(field.name, 'fieldset').length)?
+                        self.addRemoveFieldError(self.getFieldObject(field.name, 'fieldset'), '', 'error', false):
+                        self.addRemoveFieldError(self.getFieldObject(field.name, 'p'), '', 'error', false);
+                }
+            }
+        });
+        if(filledAccNumbers) {
+            !self.validateAccountNumberOnSubmit() ? isError = true : '';
+        }
+        if(!isError) {
+            if (PAYPAL.AddBankUtil.ifscStatus == 0) { 
+                isError = true; 
+                PAYPAL.ValidateForm.addRemoveFieldError(PAYPAL.ValidateForm.getFieldObject('routing_number_1', 'fieldset'), 
+                        self.inlineError['routing_number_1'], 'customError', true);
+            } 
+        }
+        return isError;
+    },
+    getFieldObject : function(fieldName, node) {
+        "use strict";
+        return $('[name="' + fieldName + '"]').closest(node);
+    },
+    clearError : function(fname, fvalue) {
+        var self = this,
+            formHasError = $('form.error');
+        if(formHasError.length && $.trim(fvalue) !== '') {
+            (self.getFieldObject(fname, 'fieldset').length)?
+                self.addRemoveFieldError(
+                        self.getFieldObject(fname, 'fieldset'), '', 'error', false):
+                self.addRemoveFieldError(
+                        self.getFieldObject(fname, 'p'), '', 'error', false);
+        }
+        ($('form .error').length == 0) ? $('form').removeClass('error') : '';
+    },
+    addRemoveFieldError : function(fieldObject, error, errorClass, set) {
+        "use strict";
+        var errorClass = $('#' + PAYPAL.AddBankUtil.label.addBankForm).hasClass('error') ? 'error' : errorClass;
+        var hTxt = $(fieldObject).not('.error').not('.customError').find('> .help');
+        var hTxtDefault = $(fieldObject).find('> .help');
+        var hTxtHidden = $(fieldObject).find('> .hTxtHidden');
+        
+        if(set){
+            if(hTxt.text().length && !hTxtHidden.text().length) {
+                hTxt.after('<span class="hTxtHidden hide">'+hTxt.text()+'</span>');
+            }
+            $(fieldObject).addClass(errorClass).find('> .help').html(error);
+        } else {
+            if(hTxtHidden.text().length) {
+                $(fieldObject).removeClass(errorClass).find('> .help').html(hTxtHidden.text());
+            } else {
+                !(hTxt.length) ? $(fieldObject).removeClass(errorClass).find('> .help').html('') : '';
+            }
+        }
+
+    },
+    isValidAccountNumber : function() {
+        "use strict";
+        var accountNo = $('#' + PAYPAL.AddBankUtil.label.maskedAccountNumber).val(), 
+            retypeAccountNo = $('#' + PAYPAL.AddBankUtil.label.retypeAccountNumber).val(),
+            self = this;
+        if(retypeAccountNo != '' && retypeAccountNo != accountNo.substr(0,retypeAccountNo.length)) {
+            self.addRemoveFieldError(
+                self.getFieldObject('retype_account_number', 'p'),
+                self.inlineError['retype_account_number_notmatch'], 'customError', true);
+            return false;
+        } else if(retypeAccountNo != '') {
+            self.addRemoveFieldError(
+                self.getFieldObject('retype_account_number', 'p'), '', 'customError', false);
+            return true;
+        } else {
+            // this will not be executed, formally closing with else block.
+        }
+    },
+    validateAccountNumberOnSubmit : function() {
+        "use strict";
+        var accountNo = $('#' + PAYPAL.AddBankUtil.label.maskedAccountNumber).val(), 
+            retypeAccountNo = $('#' + PAYPAL.AddBankUtil.label.retypeAccountNumber).val(),
+            self = this;
+        if(retypeAccountNo != '' && retypeAccountNo != accountNo) {
+            self.addRemoveFieldError(
+                self.getFieldObject('retype_account_number', 'p'),
+                self.inlineError['retype_account_number_notmatch'], 'customError error' , true);
+            return false;
+        } else {
+            self.addRemoveFieldError(
+                self.getFieldObject('retype_account_number', 'p'), '', 'customError error', false);
+            return true;
+        }
+    },
+    validateBank : function() {
+        var enteredBankName = $('#' + PAYPAL.AddBankUtil.label.bankName).val(),
+            isVaildBankName = false, errorType,
+            bankRawData = $('#bankListData').html(),
+            bankDataArray = bankRawData.split("|");
+        $.each(bankDataArray, function(key, val) {
+        	val = val.replace(/\"/g,"");
+            (val == enteredBankName) ? isVaildBankName = true : '';
+        });
+        ($('#' + PAYPAL.AddBankUtil.label.addBankForm).hasClass('error')) ?
+                errorType = 'error' : errorType = 'customError';
+                
+        PAYPAL.ValidateForm.addRemoveFieldError(
+                PAYPAL.ValidateForm.getFieldObject('bank_name', 'p'),
+                '', errorType , false);
+        if (!isVaildBankName) {
+            PAYPAL.ValidateForm.addRemoveFieldError(
+                    PAYPAL.ValidateForm.getFieldObject('bank_name', 'p'),
+                    PAYPAL.ValidateForm.inlineError['bank_name_invalid'], errorType, true);
+        }
+    }
+};
+
+PAYPAL.AddBankReview = {
+    reviewLightBox : new PAYPAL.core.lightbox('lbReviewBank', {
+        showClose : true,
+        showShadow : true
+    }),
+    ifscCode : '',
+    captureEnterTarget : '',
+    init : function() {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('form').keypress(function(event) {
+            if(event.charCode || event.keyCode) {
+            var keyPressed = event.charCode || event.keyCode;
+            var target = event.target || event.srcElement;
+            if(keyPressed == 13)
+            self.captureEnterTarget = target;
+            }
+        });
+        $('#' + objLabel.buttonContinue).click(function (e) {
+            e.preventDefault();
+            var enteredIfscCode = $('#' + objLabel.fieldIFSC).val(),
+                enteredBankName = $('#' + PAYPAL.AddBankUtil.label.bankName).val();
+            $('p.error .help, p.customError .help').html('');
+            if (self.captureEnterTarget != null
+                    && $(self.captureEnterTarget).attr('name') == 'routing_number_1'
+                    && enteredIfscCode != '') {
+                (enteredIfscCode != self.ifscCode) ? self
+                        .validateIFSC(enteredIfscCode) : '';
+                self.captureEnterTarget = null;
+            }
+            else if (PAYPAL.ValidateForm.hasError() || PAYPAL.AddBankUtil.ifscStatus == null || PAYPAL.AddBankUtil.ifscStatus == 0) {
+                $('#' + objLabel.addBankForm).addClass('error');
+                $('#' + objLabel.ifscNoSelection).removeAttr('style');
+                
+                if(enteredBankName != '' && (PAYPAL.AddBankUtil.ifscStatus == null || PAYPAL.AddBankUtil.ifscStatus == 0)) {
+                    PAYPAL.ValidateForm.validateBank();
+                }
+            }
+            else {
+                $('#' + objLabel.ifscNoSelection).css(
+                        'margin-left', '0px');
+                $('#' + objLabel.addBankForm).removeClass(
+                        'error');
+                self.populateReviewData();
+            }
+        });
+
+        $('#' + objLabel.buttonSubmit).click(function() {
+            self.submitForm();
+        });
+        $('#' + objLabel.buttonEdit).click(function () {
+            self.reviewLightBox.close();
+        });
+        $('#' + objLabel.buttonValidate).click(function(e) {
+            var enteredIfscCode = $('#' + objLabel.fieldIFSC).val();
+            (enteredIfscCode != '') 
+                ? self.validateIFSC(enteredIfscCode) 
+                : '';
+        });
+        $('#' + objLabel.fieldIFSC).blur(function() {
+            var enteredIfscCode = $('#' + objLabel.fieldIFSC).val(); 
+            (enteredIfscCode != self.ifscCode && enteredIfscCode != '') 
+                ? self.validateIFSC(enteredIfscCode) 
+                : '';
+        });
+        $('#' + objLabel.fieldIFSC).keyup(function() {
+            ($('#' + objLabel.fieldIFSC).val() != self.ifscCode)
+                ? $('#' + objLabel.buttonValidate).removeAttr('disabled')
+                : '';
+        });
+        
+        $('#' + objLabel.closeIcon).click(function() {
+            PAYPAL.AddBankReview.ifscCode = '';
+            $('#' + objLabel.ifscNoSelection).addClass('hide');
+            $('#' + objLabel.buttonValidate).removeAttr('disabled');
+        });
+    },
+    validateIFSC : function(ifscCode) {
+        var self = this,
+            ifscCode = ifscCode || 0,
+            objUtil = PAYPAL.AddBankUtil.label,
+            objValidate = PAYPAL.ValidateForm,
+            ifscFldName = $('#' + objUtil.fieldIFSC).attr('name');
+        
+        $('#' + objUtil.buttonValidate).attr('disabled', 'disabled');
+        $('.bankDetails').html('');
+        $('#' + objUtil.ifsc).html($('#ifscNA').html());
+        $('#' + objUtil.ifsc).removeClass("accessAid");
+        $('#' + objUtil.ifsc).removeClass("ifscVal");
+        self.ifscCode = ifscCode;
+        $.ajax({
+            url: window.location,
+            dataType: 'json',
+            data: {"routingNumber": ifscCode, "_eventId_fetchBank": "Fetch Bank" },
+            cache : false,
+            timeout : objUtil.ajaxTimeOut,
+            success: function(data) {
+                var flowFallBack = $('#flowFallBack');
+                $('#' + objUtil.ifscResultContainer).hide();
+                $bankDetailsContainer = $('.bankDetails')
+                $bankDetailsContainer.html('');
+                PAYPAL.AddBankIN.disableConsecutiveFields('all');
+                $('#' + objUtil.bankName).val('');
+                if(data.ajax && data.ajax.result === 'success') {
+                    var jsonResponse = data.ajax;
+                    $('#' + objUtil.ifscNoSelection).removeClass('ifscNotKnownBankName');
+                    $('#' + objUtil.ifscResultContainer).show();
+                    $('#' + objUtil.ifscResultContainer 
+                            + ' div.ifscKnown, '+'#' 
+                            + objUtil.ifscResultContainer 
+                            + ' div.successHeader').removeClass('hide');
+                    trimmedBankName = (jsonResponse.bankName === null) ? "" : jsonResponse.bankName;
+                    trimmedBranchName = (jsonResponse.branchName === null) ? "" : jsonResponse.branchName;
+                    trimmedBranchCity = (jsonResponse.branchCity === null) ? "" : jsonResponse.branchCity;
+                    trimmedBranchAddress = (jsonResponse.branchAddress === null) ? "" : jsonResponse.branchAddress;
+                    trimmedBranchState = (jsonResponse.branchState === null) ? "" : jsonResponse.branchState;
+                    $('input[name="bank_name"]').val(jsonResponse.bankName);
+
+                    var resultElement = '<span>'
+                                    + jsonResponse.bankName
+                                    + '</span> <span>'
+                                    + jsonResponse.branchName
+                                    + '</span> <input type="hidden" name="bank_acct_bank_branch" value="'
+                                    + jsonResponse.branchName + '" />';
+
+                    if (trimmedBranchAddress != ''
+                            && trimmedBranchCity != '') {
+                        resultElement += '<span>'
+                                + trimmedBranchAddress + '</span>';
+                        resultElement += '<input type="hidden" name="bank_acct_bank_branch_address" value="'
+                                + trimmedBranchAddress + '" />';
+                        resultElement += '<input type="hidden" name="bank_acct_bank_city" value="'
+                                + trimmedBranchCity + '" />';
+                    } else if (trimmedBranchAddress != '') {
+                        resultElement += '<span >'
+                                + trimmedBranchAddress
+                                + '</span>';
+                        resultElement += '<input type="hidden" name="bank_acct_bank_branch_address" value="'
+                                + trimmedBranchAddress + '" />';
+                    } else {
+                        // Nothing to go here.
+                    }
+                    resultElement += '<input type="hidden" name="bank_acct_bank_province" value="'+trimmedBranchState+'" />';
+                    $bankDetailsContainer.removeClass('hide').html(resultElement);
+                    objValidate.addRemoveFieldError(objValidate
+                            .getFieldObject(ifscFldName, 'fieldset'),
+                            '', 'customError', false);
+                    PAYPAL.AddBankUtil.ifscStatus = 1;
+                    $('#' + objUtil.closeIcon).removeClass('hide');
+                } else if(data.ajax && data.ajax.result === 'notknown') {
+                    if(!flowFallBack.length) {
+                        $('#' + objUtil.ifscResultContainer).show();
+                        $('#' + objUtil.ifscResultContainer + ' div.ifscNotKnown').removeClass('hide');
+                    }
+                    $('#' + objUtil.ifscNoSelection).removeAttr('class').removeAttr('style');
+                    $('#' + objUtil.ifscNoSelection).addClass('ifscNotKnownBankName');
+                    $('#' + objUtil.addressBlock).addClass('hide');
+                    $('#' + objUtil.headerFetchBank).addClass('hide');
+                    objValidate.addRemoveFieldError(objValidate
+                            .getFieldObject(ifscFldName, 'fieldset'),
+                            '', 'customError', false);
+                    PAYPAL.AddBankUtil.ifscStatus = 2;
+                } else if(data.ajax && data.ajax.result === 'invalidifsc') {
+                    objValidate.addRemoveFieldError(
+                            objValidate.getFieldObject(ifscFldName, 'fieldset'), 
+                            objValidate.inlineError[ifscFldName], 'customError', true);
+                    PAYPAL.AddBankUtil.ifscStatus = 0;
+                } else if(data.type && data.type === 'redirect') {
+                    PAYPAL.AddBankIN.ajaxCallTimeout();
+                } else {
+                    $('#' + objUtil.ifscNoSelection).addClass(
+                            'blueContainer').css('margin-left', '20px')
+                            .addClass('invalidIfsc')
+                            .removeClass('hide');
+                    $('#' + objUtil.ifscNoSelection).removeClass('ifscNotKnownBankName');
+                    $('#' + objUtil.headerFetchBank).removeClass('hide');
+                    $('#' + objUtil.addressBlock).removeClass('hide');
+                    $('#' + objUtil.closeIcon).addClass('hide');
+                    objValidate.addRemoveFieldError(
+                            objValidate.getFieldObject(ifscFldName, 'fieldset'), 
+                            objValidate.inlineError[ifscFldName], 'customError', true);
+                    PAYPAL.AddBankUtil.ifscStatus = 0;
+                    PAYPAL.AddBankIN.disableConsecutiveFields('all');
+                }
+            },
+            error: function(xhr, ajaxOptions, thrownError) {
+                PAYPAL.AddBankIN.ajaxCallTimeout();
+            },
+            beforeSend: function(xhr) {
+                $('#' + objUtil.ifscNoSelection).addClass('hide');
+                $('#' + objUtil.ifscProcessContainer).removeClass('hide');
+                $('#' + objUtil.ifscResultContainer +',' + '#' + objUtil.ifscResultContainer + ' div').addClass('hide');
+                $('#' + objUtil.buttonContinue).attr('disabled', 'disabled');
+                $('#' + objUtil.buttonCancel).attr('disabled', 'disabled');
+            },
+            complete: function(XMLHttpRequest, textStatus) {
+                $('#' + objUtil.ifscProcessContainer).addClass('hide');
+                $('#' + objUtil.ifscResultContainer).removeClass('hide');
+                $('#' + objUtil.buttonContinue).removeAttr('disabled');
+                $('#' + objUtil.buttonCancel).removeAttr('disabled');
+            }
+        });
+    },
+    populateReviewData : function() {
+        var self = this,
+            fieldPrefix = 'review_',
+            validIfscfieldPrefix = 'res_',
+            fiedContainer = {
+            firstName : 'bank_acct_first_name',
+            lastName : 'lastName',
+            businessFullName : 'bank_acct_business_name',
+            city : 'bank_acct_bank_city',
+            state : 'bank_acct_bank_province',
+            branch : 'bank_acct_bank_branch',
+            address : 'bank_acct_bank_branch_address'
+        };
+        $('#lbReviewBank p.dynamic').hide();
+        $('.defaulHidden').hasClass('hide') ? $('.defaulHidden').removeClass('hide') : '';
+        var formFields = $('#' + PAYPAL.AddBankUtil.label.addBankForm).serializeArray();
+        var resultVaildIfsc = $('.bankDetails').html();
+        $.each(formFields, function(index, field) {
+            if(field.name == fiedContainer.businessFullName && field.value != '') {
+                $('#' + fieldPrefix + fiedContainer.firstName +' span.field').text(field.value);
+            }
+            else if(field.name == fiedContainer.lastName && field.value != '') {
+                $('#' + fieldPrefix + fiedContainer.firstName +' span.field').append(' ' + field.value);
+            }
+            else if(field.name == fiedContainer.branch && field.value != '') {
+                (resultVaildIfsc.length) ? 
+                        $('#' + fieldPrefix + field.name + ' span.field').html(self.getFormatPopulatedBranch(field.value)) :
+                        $('#' + fieldPrefix + field.name + ' span.field').html(self.getFormatedBranch(field.value));
+                $('#' + fieldPrefix + field.name).show();
+            }
+            else if(field.value != '') {
+                $('#' + fieldPrefix + field.name + ' span.field').html(field.value);
+                $('#' + fieldPrefix + field.name).show();
+            } else {
+                $('#' + fieldPrefix + field.name + ' span.field').html('-');
+            }
+        });         
+        self.reviewLightBox.open();
+        var s = s_gi('paypalglobal');
+         s.pageName = 'main:acsrv:fundingsource:bank:add-bankReview';
+         s.t();
+    },
+    getFormatPopulatedBranch : function(branchName) {
+        var fiedContainer = {
+            city : 'bank_acct_bank_city',
+            state : 'bank_acct_bank_province',
+        };
+        var resTxt = branchName;
+        ($('input[name="'+fiedContainer.city+'"]').val() != "") ? 
+            resTxt += ', ' + $('input[name="'+fiedContainer.city+'"]').val() : '';
+        ($('input[name="'+fiedContainer.state+'"]').val() != "") ?
+            resTxt += ', ' + $('input[name="'+fiedContainer.state+'"]').val() : '';
+
+            return  resTxt;
+    },
+    getFormatedBranch : function(branchName) {
+        var fiedContainer = {
+            city : 'bank_acct_bank_city',
+            state : 'bank_acct_bank_province',
+        };
+        var resTxt = branchName;
+        ($('select[name="'+fiedContainer.city+'"]').val() != "") ? 
+            resTxt += ', ' + $('select[name="'+fiedContainer.city+'"]').val() : '';
+        ($('select[name="'+fiedContainer.state+'"]').val() != "") ?
+            resTxt += ', ' + $('select[name="'+fiedContainer.state+'"]').val() : '';
+
+            return  resTxt;
+    },
+    submitForm : function() {
+        var self = this, objLabel = PAYPAL.AddBankUtil.label;
+        $('#' + objLabel.buttonSubmit +','+ '#' + objLabel.buttonEdit).attr('disabled', 'disabled');
+        $el = $('<input type="hidden" name="_eventId_addbank" value="1">');
+        $('#' + objLabel.accountNumber).val($('#' + objLabel.maskedAccountNumber).val());
+        $('#' + objLabel.addBankForm).append($el);
+        $('#' + objLabel.addBankForm).submit();
+    }
+};
+
+$(document).ready(function() {
+    PAYPAL.AddBankIN.init();
+    PAYPAL.AddBankReview.init();
+});

@@ -1,0 +1,24 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<body>
+<div id="container">
+</div>
+
+var calc = {};
+
+calc.additionCalculation = {
+	
+findAdd.function {
+	
+	number1 = parseInt(document.getelementById("number1").value);
+	
+
+
+	}
+
+
+}
+</body>
+</head>
+</html>

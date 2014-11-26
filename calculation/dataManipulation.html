@@ -1,0 +1,25 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Calculations</title>
+	</head>
+	<body>
+		<script>
+			var dataCalculator = {}, number1 = 10, number2 = 100;
+
+			dataCalculator.sumObject = {
+				sum : 0,
+
+				findSum : function (number1, number2) {
+					this.sum = number1 + number2;
+					document.writeln("Sum: " + this.sum);
+				}
+			};
+
+			document.writeln("Initial Value of sum: " + dataCalculator.sumObject.sum + "<br />");
+
+			dataCalculator.sumObject.findSum(number1, number2);
+		</script>
+	</body>
+</html>

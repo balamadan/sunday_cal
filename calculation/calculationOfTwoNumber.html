@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+	<head>
+			<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>Calculation</title>
+	</head>
+	<body>
+
+		<div id="container">
+
+			<form name="calculationForm" method="post" action="#"/>
+
+			<p> Calculator </p>
+			<p> ********** </p>
+
+			<p> 
+			<label for = "number1" > Enter Number1 value: </label>
+			<input type = "text" name = "number1" id = "number1"/> 
+			</p> 
+
+			<p>
+			<label for = "number2" > Enter Number2 value: </label>
+			<input type = "text" name = "number2" id = "number2"/>
+			</p> 
+
+			<p>
+			<label for = "Result" > The Result is: </label>
+			<input type = "text" name ="result" id ="result"/>
+			</p> 
+
+			<p>
+
+			<input type = "button" value = "Sum"  name ="result" onclick = "numberCalculator.addNumberObject.findSum()"/> 
+
+			<input type = "button" value = "Difference"  name ="result" onclick = "numberCalculator.addNumberObject.findDifference()"/>
+
+			<input type = "button" value = "Product"  name ="result" onclick = "numberCalculator.addNumberObject.findProduct()"/> 
+
+			<input type = "button" value ="Quotient"  name ="result" onclick = "numberCalculator.addNumberObject.findQuotient()"/> 
+
+			<input type = "reset" />
+
+			</p>
+ 
+
+
+		</div>
+
+	
+<script>
+
+	var numberCalculator = {};
+
+	numberCalculator.addNumberObject = {
+
+		getValues: function () {
+			var numArray = [];
+			var number1 = parseInt (document.getElementById("number1").value);
+			var number2 = parseInt (document.getElementById("number2").value);
+			numArray.push(number1);
+			numArray.push(number2);
+			return numArray;
+		},
+
+		findSum : function () {
+			var numberArray = this.getValues();
+			document.getElementById("result").value = numberArray[0] + numberArray[1];
+		},
+
+		findDifference : function () {
+			var numberArray = this.getValues();
+			document.getElementById("result").value = numberArray[0] - numberArray[1];
+		},
+
+		findProduct : function () {
+			var numberArray = this.getValues();
+			document.getElementById("result").value = numberArray[0] * numberArray[1];
+		},
+
+		findQuotient : function () {
+			var numberArray = this.getValues();
+			document.getElementById("result").value = numberArray[0] / numberArray[1];
+		}
+
+};
+
+</script>
+
+</body>
+
+</html>

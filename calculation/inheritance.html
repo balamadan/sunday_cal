@@ -1,0 +1,45 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Calculations</title>
+		<style>
+			.textAsLink {
+				text-decoration: underline;
+				color: #00F;
+				cursor: pointer;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="container">
+			<h2 id="title">Inheritance Example</h2>
+			<div id="content">
+
+			</div>
+		</div>
+		<script>
+			// Parent
+			var vehicle =  function () {
+				this.wheels = 4;
+			};
+
+			// Child Object
+			var auto = function () {
+				this.hasPomBom = true;
+			};
+
+			// Inheritance
+			auto.prototype = new vehicle();
+
+			var vehicleObj = new vehicle();
+			var autoObj = new auto();
+			var autoObj1 = new auto();
+
+			// Overriding
+			autoObj.wheels = 3;
+
+			document.getElementById("content").innerHTML = "Auto has " + autoObj.wheels + " wheels and it has hasPomBom " + autoObj.hasPomBom + " vehicle has " + vehicleObj.wheels + " wheels Another auto has " + autoObj1.wheels + " wheels";
+		</script>
+	</body>
+</html>

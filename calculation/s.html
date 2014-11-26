@@ -1,0 +1,29 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<body>
+			<div id="container">
+				<input type="text" id = "number1" name = "number1"/>
+				<input type="text" id = "number2" name = "number2"/>
+				<input type="text" id= "result" name="result"/> 
+				<input type ="button" id = "Add" name = "add" value="Addition" onclick="calc.additionCalculation.findAdd()"/>
+			</div>
+
+<script>
+
+	var calc = {};
+
+	calc.additionCalculation = {
+		
+	findAdd:function() {
+	
+		number1 = parseInt(document.getelementById("number1").value);
+		number2 = parseInt(document.getelementById("number2").value);
+		result = number1 + number2;
+	}
+
+};
+</script>
+		</body>
+	</head>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Calculations</title>
+		<style>
+			.textAsLink {
+				text-decoration: underline;
+				color: #00F;
+				cursor: pointer;
+			}
+			.changeStyle {
+				background: #F00;
+				color: #FFF;
+				font-weight: bold;
+				font-size: 1.3em;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="container">
+			<h2 id="title">Inheritance Example</h2>
+			<p class="textAsLink"><span id="clickText">Click me to hide the below content</span></p>
+			<p class="textAsLink"><span id="clickText1">Click me to change the color</span></p>
+			<p id="test">I am the inner content</p>
+			<p id="test1">I am the last content</p>
+		</div>
+		<script>
+			document.getElementById("test").innerHTML = "I am the inner content";
+
+			var hideContentText = document.getElementById("clickText");
+			hideContentText.onclick = function () {
+				document.getElementById("test").innerHTML = "";
+			};
+
+			var hideContentText1 = document.getElementById("clickText1");
+			hideContentText1.onclick = function () {
+				var contentObj = document.getElementById("test1");
+				contentObj.className = "changeStyle";
+			};
+			
+			console.log("test");
+		</script>
+	</body>
+</html>
